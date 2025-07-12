@@ -52,7 +52,7 @@ class GroqYandexTTS:
             async with aiohttp.ClientSession() as session:
                 async with session.post(tts_url, headers=headers, data=data) as resp:
                     if resp.status != 200:
-                        print("TTS error:", await resp.text())
+                        error_text = await resp.text()
                         logger.error(f"TTS error: {error_text}")
                         return
                     audio_bytes = await resp.read()
