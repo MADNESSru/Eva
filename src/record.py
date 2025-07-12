@@ -76,11 +76,32 @@ class AudioProcessor(voice_recv.AudioSink):
 
                 try:
                     print("Audio capture stopped")
+                    filename = f"recorded_{self.target_user.id}.wav"
                     sample_rate = 48000  # Discord's sample rate
-                    sample_width = 4      # 16-bit audio  Should this be 2
+                    sample_width = 2      # 16-bit audio  Should this be 2
+                    channels = 1
 
+                    # временный блок проверки валидности входного файла
+                    with wave.open(filename, 'wb') as wf:
+                        wf.setnchannels(channels)
+                        wf.setsampwidth(sample_width)
+                        wf.setframerate(sample_rate)
+                        wf.writeframes(self.buffer)
+            
+                    print(f"Saved recorded audio to {filename}")
+                    
+                    future = asyncio.run_coroutine_threadsafe(
+                        self.channel.send(file=discord.File(filename)),
+                        self.bot.loop
+                    )
+                    try:
+                        future.result(timeout=5)
+                    except Exception as e:
+                        print(f"Error sending audio file: {e}")
+                    # конец блока проверки
+                    
                     audio_data = sr.AudioData(self.buffer, sample_rate, sample_width) # sample_width=2, channels=1
-                    #print("Audio capture done. Now convert it to text...")
+                    print("Audio capture done. Now convert it to text...")
 
                     wav_data = audio_data.get_wav_data()
 
@@ -101,7 +122,7 @@ class AudioProcessor(voice_recv.AudioSink):
 
                     # Process the audio
                     if audio_data.get_wav_data().strip():
-                        #print("Audio data is not empty")
+                        print("Audio data is not empty")
                         result = convert_audio_to_text_using_google_speech(audio_data)
                         if result in ["could_not_understand", "service_error", "error"]:
                             # Handle the error based on the specific return value
