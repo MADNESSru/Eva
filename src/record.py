@@ -132,7 +132,7 @@ class AudioProcessor(voice_recv.AudioSink):
                         print(f"Text: {result}")
 
                         # We use self.bot.loop to schedule the coroutine on Discord's event loop
-                        asyncio.run_coroutine_threadsafe(self.llm_tss.process_text(result, self.voice_client), self.bot.loop)
+                        asyncio.run_coroutine_threadsafe(self.llm_tts.process_text(result, self.voice_client), self.bot.loop)
 
                 except Exception as e:
                     print(f"Error processing audio: {e}")
