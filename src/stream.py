@@ -1,7 +1,11 @@
 import asyncio
 from queue import Queue, Empty
 import discord
+import logging
 from typing import Optional
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 class QueuedStreamingPCMAudio(discord.AudioSource):
     def __init__(self, async_queue: asyncio.Queue[Optional[bytes]]) -> None:
@@ -30,7 +34,7 @@ class QueuedStreamingPCMAudio(discord.AudioSource):
                     except asyncio.CancelledError:
                         break
                     except Exception as e:
-                        print(f"Buffer fill error: {e}")
+                        logger.error(f"Buffer fill error: {e}", exc_info=True)
                         break
             finally:
                 self.sync_queue.put(None)
@@ -72,11 +76,11 @@ class QueuedStreamingPCMAudio(discord.AudioSource):
             return bytes(result)
 
         except Exception as e:
-            print(f"Read error: {e}")
+            logger.error(f"Read error: {e}", exc_info=True)
             return self.silence
 
     def cleanup(self) -> None:
-        print("Cleaning up audio source...")
+        logger.info("Cleaning up audio source...")
         self._end_flag = True
         self.interrupted: bool = True
         if self.buffer_task and not self.buffer_task.done():
