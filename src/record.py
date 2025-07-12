@@ -1,6 +1,7 @@
 import asyncio
 import traceback
 import discord
+import wave
 import speech_recognition as sr
 from typing import Optional
 from src.llm_tts import GroqYandexTTS 
