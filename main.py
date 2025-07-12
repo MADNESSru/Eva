@@ -66,7 +66,7 @@ async def on_ready() -> None:
     print(f'Logged in as {bot.user}')
     await bot.tree.sync()
     print('------')
-    
-    await gemini_ws.connect()
+
+    # await llm_tts.connect()
 
 bot.run(os.getenv('DISCORD_TOKEN'))
