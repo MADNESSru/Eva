@@ -34,8 +34,9 @@ bot: commands.Bot = commands.Bot(command_prefix="!", intents=intents)
 
 @bot.tree.command(name="chat")
 async def chat(interaction: discord.Interaction) -> None:
+    await interaction.response.defer(ephemeral=True)
     if not interaction.user.voice:
-        await interaction.response.send_message("You need to be in a voice channel!")
+        await interaction.followup.send("You need to be in a voice channel!", ephemeral=True)
         return
     
     voice_client: voice_recv.VoiceRecvClient = await interaction.user.voice.channel.connect(
@@ -49,7 +50,7 @@ async def chat(interaction: discord.Interaction) -> None:
     )
     voice_client.listen(sink)
     
-    await interaction.response.send_message("Eva is listening!")
+    await interaction.followup.send("Eva is listening!", ephemeral=True)
 
 @bot.tree.command(name="exit")
 async def exit(interaction: discord.Interaction) -> None:
