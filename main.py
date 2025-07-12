@@ -4,19 +4,23 @@ from discord.ext import commands, voice_recv
 from src.record import AudioProcessor
 from src.llm_tts import GroqYandexTTS
 from dotenv import load_dotenv
-load_dotenv()
 import threading
 import logging
 import sys
 
+load_dotenv()
+
+# Настройка логирования
 logging.basicConfig(
     level=logging.DEBUG,
     format='[%(asctime)s] [%(levelname)s] %(name)s: %(message)s',
     stream=sys.stdout
 )
+logger = logging.getLogger(__name__)
 
 def run_keepalive():
     import uvicorn
+    logger.info("Starting keepalive server...")
     uvicorn.run("keepalive:app", host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
 
 threading.Thread(target=run_keepalive, daemon=True).start()
@@ -79,9 +83,9 @@ async def exit(interaction: discord.Interaction) -> None:
 
 @bot.event
 async def on_ready() -> None:
-    print(f'Logged in as {bot.user}')
+    logger.info(f'Logged in as {bot.user}')
     await bot.tree.sync()
-    print('------')
+    logger.info('------')
 
     # await llm_tts.connect()
 
