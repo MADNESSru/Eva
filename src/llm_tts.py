@@ -1,6 +1,7 @@
 import os
 import aiohttp
 import asyncio
+import logging
 from groq import Groq
 from discord import VoiceClient
 from src.stream import QueuedStreamingPCMAudio
