@@ -32,6 +32,7 @@ class AudioProcessor(voice_recv.AudioSink):
         super().__init__()
         self.buffer: bytes = b""
         self.target_user: discord.User = user
+        self.known_ssrcs = set()
         self.recording_active: bool = False
         self.channel: discord.TextChannel = channel
         self.bot: commands.Bot = bot
