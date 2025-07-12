@@ -5,6 +5,13 @@ from src.record import AudioProcessor
 from src.llm_tts import GroqYandexTTS
 from dotenv import load_dotenv
 load_dotenv()
+import threading
+
+def run_keepalive():
+    import uvicorn
+    uvicorn.run("keepalive:app", host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
+threading.Thread(target=run_keepalive, daemon=True).start()
 
 ##### Options #####
 
