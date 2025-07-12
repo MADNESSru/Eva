@@ -79,7 +79,7 @@ class AudioProcessor(voice_recv.AudioSink):
                     sample_rate = 48000  # Discord's sample rate
                     sample_width = 4      # 16-bit audio  Should this be 2
 
-                    audio_data = sr.AudioData(self.buffer, sample_rate, sample_width)
+                    audio_data = sr.AudioData(self.buffer, sample_rate, sample_width) # sample_width=2, channels=1
                     #print("Audio capture done. Now convert it to text...")
 
                     wav_data = audio_data.get_wav_data()
