@@ -2,8 +2,9 @@ import asyncio
 import traceback
 import discord
 import wave
-import speech_recognition as sr
 import logging
+import os
+import aiohttp
 from typing import Optional
 from src.llm_tts import GroqYandexTTS
 from discord.ext import voice_recv, commands
@@ -11,21 +12,32 @@ from discord.ext import voice_recv, commands
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
-recognizer: sr.Recognizer = sr.Recognizer()
+WHISPER_API_KEY = os.getenv("WHISPER_API_KEY")
+WHISPER_API_URL = os.getenv("WHISPER_API_URL")
 
-def convert_audio_to_text_using_google_speech(audio: sr.AudioData) -> str:
-    logger.info("Converting audio to text...")
+async def transcribe_with_whisper(filename: str) -> str:
+    logger.info("Transcribing audio with Whisper API...")
     try:
-        command_text: str = recognizer.recognize_google(audio)
-        return command_text.lower()
-    except sr.UnknownValueError:
-        logger.warning("Speech recognition could not understand the audio")
-        return "could_not_understand"
-    except sr.RequestError as e:
-        logger.error(f"Could not request results from speech recognition service; {e}")
-        return "service_error"
+        headers = {
+            "Authorization": f"Bearer {WHISPER_API_KEY}"
+        }
+        data = aiohttp.FormData()
+        data.add_field('file', open(filename, 'rb'), filename=filename, content_type='audio/wav')
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(WHISPER_API_URL, headers=headers, data=data) as resp:
+                if resp.status != 200:
+                    logger.error(f"Whisper API error: {resp.status} {await resp.text()}")
+                    return "service_error"
+                result = await resp.json()
+                # Для async-версии API результат может прийти не сразу, а по job_id. 
+                # В этом случае нужно делать дополнительный GET-запрос. 
+                # Но если API сразу возвращает результат, то:
+                text = result.get("text") or result.get("transcription") or ""
+                logger.info(f"Whisper transcript: {text}")
+                return text.lower() if text else "could_not_understand"
     except Exception as e:
-        logger.error(f"Error in speech recognition: {e}", exc_info=True)
+        logger.error(f"Error in Whisper API: {e}", exc_info=True)
         return "error"
 
 class AudioProcessor(voice_recv.AudioSink):
@@ -48,7 +60,6 @@ class AudioProcessor(voice_recv.AudioSink):
         return False
 
     def write(self, user, audio_data):
-        """Accumulate audio data only when recording is active."""
         if hasattr(audio_data, 'ssrc') and audio_data.ssrc not in self.known_ssrcs:
             self.known_ssrcs.add(audio_data.ssrc)
             logger.info(f"Registered new SSRC: {audio_data.ssrc} from user {user}")
@@ -66,7 +77,6 @@ class AudioProcessor(voice_recv.AudioSink):
                 self.voice_client.stop_playing()
 
             self.recording_active = True
-            # Если был запущен таймер завершения записи — отменяем его
             if self.speaking_timeout_task:
                 self.speaking_timeout_task.cancel()
                 self.speaking_timeout_task = None
@@ -77,17 +87,15 @@ class AudioProcessor(voice_recv.AudioSink):
         if member == self.target_user:
             self.recording_active = False
 
-            # Если уже был запущен таймер — отменяем
             if self.speaking_timeout_task:
                 self.speaking_timeout_task.cancel()
 
-            # Запускаем таймер: если пользователь не начал говорить снова за 0.7 сек — обрабатываем буфер
             loop = asyncio.get_event_loop()
             self.speaking_timeout_task = loop.call_later(
-                0.7, lambda: asyncio.ensure_future(self._finalize_recording())
+                0.7, lambda: asyncio.ensure_future(self.process_recorded_audio())
             )
 
-    async def _finalize_recording(self):
+    async def process_recorded_audio(self):
         if not self.buffer:
             logger.info("No audio buffer to process.")
             return
@@ -95,11 +103,10 @@ class AudioProcessor(voice_recv.AudioSink):
         try:
             logger.info("Audio capture stopped")
             filename = f"recorded_{self.target_user.id}.wav"
-            sample_rate = 48000  # Discord's sample rate
-            sample_width = 2      # 16-bit audio
+            sample_rate = 48000
+            sample_width = 2
             channels = 1
 
-            # Сохраняем буфер в WAV-файл
             with wave.open(filename, 'wb') as wf:
                 wf.setnchannels(channels)
                 wf.setsampwidth(sample_width)
@@ -118,18 +125,7 @@ class AudioProcessor(voice_recv.AudioSink):
             except Exception as e:
                 logger.error(f"Error sending audio file: {e}", exc_info=True)
 
-            audio_data = sr.AudioData(self.buffer, sample_rate, sample_width)
-            logger.info("Audio capture done. Now convert it to text...")
-
-            wav_data = audio_data.get_wav_data()
-
             # Проверка на пустой/тишину
-            if not wav_data or not wav_data.strip():
-                logger.warning("No words captured - audio appears to be silence")
-                self.buffer = b""
-                return
-
-            # Минимальная длина аудио (0.3 сек)
             audio_length = len(self.buffer) / (sample_rate * sample_width)
             if audio_length < 0.3:
                 logger.warning("Audio too short - likely not a complete word")
@@ -138,35 +134,22 @@ class AudioProcessor(voice_recv.AudioSink):
 
             self.buffer = b""
 
-            # Распознавание речи
-            if audio_data.get_wav_data().strip():
-                logger.info("Audio data is not empty")
-                result = convert_audio_to_text_using_google_speech(audio_data)
-                if result in ["could_not_understand", "service_error", "error"]:
-                    if result == "could_not_understand":
-                        future = asyncio.run_coroutine_threadsafe(
-                            self.channel.send("I couldn't understand you."),
-                            self.bot.loop
-                        )
-                    elif result == "service_error":
-                        future = asyncio.run_coroutine_threadsafe(
-                            self.channel.send("I'm having trouble connecting to the speech service. Please try again in a moment."),
-                            self.bot.loop
-                        )
-                    else:
-                        future = asyncio.run_coroutine_threadsafe(
-                            self.channel.send("Something went wrong. I'm ready to listen again."),
-                            self.bot.loop
-                        )
-                    try:
-                        future.result(timeout=5)
-                    except Exception as e:
-                        logger.error(f"Error sending message: {e}", exc_info=True)
-                    return
+            # Распознавание речи через Whisper API
+            transcript = await transcribe_with_whisper(filename)
+            if transcript in ["could_not_understand", "service_error", "error"] or not transcript.strip():
+                future = asyncio.run_coroutine_threadsafe(
+                    self.channel.send("I couldn't understand you."),
+                    self.bot.loop
+                )
+                try:
+                    future.result(timeout=5)
+                except Exception as e:
+                    logger.error(f"Error sending message: {e}", exc_info=True)
+                return
 
-                logger.info(f"Text: {result}")
+            logger.info(f"Text: {transcript}")
 
-                asyncio.run_coroutine_threadsafe(self.llm_tts.process_text(result, self.voice_client), self.bot.loop)
+            asyncio.run_coroutine_threadsafe(self.llm_tts.process_text(transcript, self.voice_client), self.bot.loop)
 
         except Exception as e:
             logger.error(f"Error processing audio: {e}", exc_info=True)
