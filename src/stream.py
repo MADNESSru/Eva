@@ -15,8 +15,8 @@ class QueuedStreamingPCMAudio(discord.AudioSource):
         self.pos: int = 0
         self._end_flag: bool = False
         self.interrupted: bool = False
-        self.input_frame_size: int = 960  # For 24kHz mono
-        self.output_frame_size: int = 3840  # 20ms at 48kHz stereo
+        self.input_frame_size: int = 1920  #960  # For 24kHz mono
+        self.output_frame_size: int = 3840  #3840  # 20ms at 48kHz stereo
         self.silence: bytes = b'\x00' * self.output_frame_size
         self.buffer_task: Optional[asyncio.Task[None]] = None
         self._start_buffer_task()
@@ -67,11 +67,11 @@ class QueuedStreamingPCMAudio(discord.AudioSource):
             
             for i in range(0, len(chunk), 2):
                 sample = chunk[i:i+2]
-                pos = i * 4
+                pos = i * 2 #4
                 result[pos:pos+2] = sample
                 result[pos+2:pos+4] = sample
-                result[pos+4:pos+6] = sample
-                result[pos+6:pos+8] = sample
+                #result[pos+4:pos+6] = sample
+                #result[pos+6:pos+8] = sample
 
             return bytes(result)
 
