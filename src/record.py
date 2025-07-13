@@ -90,7 +90,7 @@ class AudioProcessor(voice_recv.AudioSink):
             if self.speaking_timeout_task:
                 self.speaking_timeout_task.cancel()
 
-            loop = asyncio.get_event_loop()
+            loop = self.bot.loop
             self.speaking_timeout_task = loop.call_later(
                 0.7, lambda: asyncio.ensure_future(self.process_recorded_audio())
             )
